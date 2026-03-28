@@ -3,48 +3,48 @@ import yfinance as yf
 import pandas as pd
 import time
 
-st.set_page_config(page_title="Pocket Pro Bot", layout="centered")
+st.set_page_config(page_title="Pocket Bot Active", layout="centered")
 
-st.title("⚡ POCKET SIGNAL BOT PRO")
+st.title("⚡ POCKET SIGNAL BOT (ACTIVE MODE)")
 
-symbol = st.selectbox("📊 Actif", ["EURUSD=X", "BTC-USD"])
+symbol = st.selectbox("📊 Actif", ["EURUSD=X", "GBPUSD=X", "BTC-USD"])
 duration = st.selectbox("⏱ Durée", ["1 min", "5 min"])
 
-# 🔁 récupération ultra sécurisée
+# 🔁 récupération stable
 def get_data(symbol):
     for _ in range(5):
         try:
             data = yf.download(symbol, period="1d", interval="1m", progress=False)
             if data is not None and not data.empty:
                 data = data.dropna()
-                if len(data) > 30:
+                if len(data) > 20:
                     return data
         except:
             pass
         time.sleep(2)
     return None
 
-# 🔥 RSI simple stable
-def compute_rsi(close):
+# 🔥 RSI stable
+def compute_rsi(close, period=7):
     delta = close.diff()
-    gain = delta.clip(lower=0).rolling(7).mean()
-    loss = (-delta.clip(upper=0)).rolling(7).mean()
+    gain = delta.clip(lower=0).rolling(period).mean()
+    loss = (-delta.clip(upper=0)).rolling(period).mean()
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
+# 🚀 bouton
 if st.button("🚀 GET SIGNAL"):
 
     with st.spinner("Analyse en cours..."):
         data = get_data(symbol)
 
     if data is None:
-        st.error("❌ Marché indisponible, réessaie dans 10 secondes")
+        st.error("❌ Marché indisponible, réessaie")
     else:
         try:
             close = data["Close"]
             open_price = data["Open"]
 
-            # 🔥 forcer format propre
             if isinstance(close, pd.DataFrame):
                 close = close.iloc[:, 0]
             if isinstance(open_price, pd.DataFrame):
@@ -56,7 +56,6 @@ if st.button("🚀 GET SIGNAL"):
             # 📊 indicateurs
             ema5 = close.ewm(span=5).mean()
             ema10 = close.ewm(span=10).mean()
-            ema20 = close.ewm(span=20).mean()
             rsi = compute_rsi(close)
 
             # 🔥 dernières valeurs
@@ -64,24 +63,27 @@ if st.button("🚀 GET SIGNAL"):
             last_open = float(open_price.iloc[-1])
             last_ema5 = float(ema5.iloc[-1])
             last_ema10 = float(ema10.iloc[-1])
-            last_ema20 = float(ema20.iloc[-1])
             last_rsi = float(rsi.iloc[-1])
 
-            # 🎯 logique sniper
-            trend_up = last_ema5 > last_ema10 > last_ema20
-            trend_down = last_ema5 < last_ema10 < last_ema20
+            # ⚡ STRATÉGIE ACTIVE (PLUS DE SIGNAUX)
+            buy = (
+                last_ema5 > last_ema10 and last_rsi > 50
+            )
 
-            buy = trend_up and last_rsi > 60 and last_close > last_open
-            sell = trend_down and last_rsi < 40 and last_close < last_open
+            sell = (
+                last_ema5 < last_ema10 and last_rsi < 50
+            )
 
             st.subheader("📡 SIGNAL")
 
             if buy:
                 st.success(f"🟢 BUY ({duration})")
+                st.info("👉 Clique UP")
             elif sell:
                 st.error(f"🔴 SELL ({duration})")
+                st.info("👉 Clique DOWN")
             else:
-                st.warning("⚪ ATTENDS (pas de signal fiable)")
+                st.warning("⚪ ATTENDS")
 
         except:
-            st.error("❌ Problème données, réessaie")
+            st.error("❌ Petite erreur, réessaie")
