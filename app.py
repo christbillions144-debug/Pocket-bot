@@ -3,14 +3,11 @@ import yfinance as yf
 import pandas as pd
 import time
 
-st.set_page_config(page_title="Pocket Bot Active", layout="centered")
-
-st.title("⚡ POCKET SIGNAL BOT (ACTIVE MODE)")
+st.title("⚡ POCKET BOT (NO WAIT MODE)")
 
 symbol = st.selectbox("📊 Actif", ["EURUSD=X", "GBPUSD=X", "BTC-USD"])
 duration = st.selectbox("⏱ Durée", ["1 min", "5 min"])
 
-# 🔁 récupération stable
 def get_data(symbol):
     for _ in range(5):
         try:
@@ -21,10 +18,9 @@ def get_data(symbol):
                     return data
         except:
             pass
-        time.sleep(2)
+        time.sleep(1)
     return None
 
-# 🔥 RSI stable
 def compute_rsi(close, period=7):
     delta = close.diff()
     gain = delta.clip(lower=0).rolling(period).mean()
@@ -32,58 +28,39 @@ def compute_rsi(close, period=7):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# 🚀 bouton
 if st.button("🚀 GET SIGNAL"):
 
-    with st.spinner("Analyse en cours..."):
-        data = get_data(symbol)
+    data = get_data(symbol)
 
     if data is None:
-        st.error("❌ Marché indisponible, réessaie")
+        st.error("❌ Erreur marché")
     else:
-        try:
-            close = data["Close"]
-            open_price = data["Open"]
+        close = data["Close"]
+        open_price = data["Open"]
 
-            if isinstance(close, pd.DataFrame):
-                close = close.iloc[:, 0]
-            if isinstance(open_price, pd.DataFrame):
-                open_price = open_price.iloc[:, 0]
+        if isinstance(close, pd.DataFrame):
+            close = close.iloc[:, 0]
+        if isinstance(open_price, pd.DataFrame):
+            open_price = open_price.iloc[:, 0]
 
-            close = close.astype(float)
-            open_price = open_price.astype(float)
+        close = close.astype(float)
+        open_price = open_price.astype(float)
 
-            # 📊 indicateurs
-            ema5 = close.ewm(span=5).mean()
-            ema10 = close.ewm(span=10).mean()
-            rsi = compute_rsi(close)
+        ema5 = close.ewm(span=5).mean()
+        ema10 = close.ewm(span=10).mean()
+        rsi = compute_rsi(close)
 
-            # 🔥 dernières valeurs
-            last_close = float(close.iloc[-1])
-            last_open = float(open_price.iloc[-1])
-            last_ema5 = float(ema5.iloc[-1])
-            last_ema10 = float(ema10.iloc[-1])
-            last_rsi = float(rsi.iloc[-1])
+        last_close = float(close.iloc[-1])
+        last_ema5 = float(ema5.iloc[-1])
+        last_ema10 = float(ema10.iloc[-1])
+        last_rsi = float(rsi.iloc[-1])
 
-            # ⚡ STRATÉGIE ACTIVE (PLUS DE SIGNAUX)
-            buy = (
-                last_ema5 > last_ema10 and last_rsi > 50
-            )
+        st.subheader("📡 SIGNAL")
 
-            sell = (
-                last_ema5 < last_ema10 and last_rsi < 50
-            )
-
-            st.subheader("📡 SIGNAL")
-
-            if buy:
-                st.success(f"🟢 BUY ({duration})")
-                st.info("👉 Clique UP")
-            elif sell:
-                st.error(f"🔴 SELL ({duration})")
-                st.info("👉 Clique DOWN")
-            else:
-                st.warning("⚪ ATTENDS")
-
-        except:
-            st.error("❌ Petite erreur, réessaie")
+        # 🔥 FORCER SIGNAL
+        if last_ema5 > last_ema10:
+            st.success(f"🟢 BUY ({duration})")
+            st.info("👉 Clique UP")
+        else:
+            st.error(f"🔴 SELL ({duration})")
+            st.info("👉 Clique DOWN")
