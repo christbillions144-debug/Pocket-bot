@@ -3,14 +3,14 @@ import yfinance as yf
 import pandas as pd
 import time
 
-st.set_page_config(page_title="Pocket Bot Ultra", layout="centered")
+st.set_page_config(page_title="Pocket Sniper Bot", layout="centered")
 
-st.title("⚡ POCKET BOT ULTRA AGRESSIF")
+st.title("🎯 POCKET SNIPER BOT")
 
 symbol = st.selectbox("📊 Actif", ["EURUSD=X", "GBPUSD=X", "BTC-USD"])
 duration = st.selectbox("⏱ Durée", ["1 min", "5 min"])
 
-# 🔁 récupération rapide
+# 🔁 récupération stable
 def get_data(symbol):
     for _ in range(5):
         try:
@@ -19,11 +19,11 @@ def get_data(symbol):
                 return data.dropna()
         except:
             pass
-        time.sleep(1)
+        time.sleep(2)
     return None
 
-# 🔥 RSI rapide
-def compute_rsi(close, period=5):
+# 🔥 RSI stable
+def compute_rsi(close, period=7):
     delta = close.diff()
     gain = delta.clip(lower=0).rolling(period).mean()
     loss = (-delta.clip(upper=0)).rolling(period).mean()
@@ -31,60 +31,71 @@ def compute_rsi(close, period=5):
     return 100 - (100 / (1 + rs))
 
 # 🚀 bouton
-if st.button("🚀 GET SIGNAL"):
+if st.button("🚀 GET SNIPER SIGNAL"):
 
-    data = get_data(symbol)
+    with st.spinner("Analyse sniper..."):
+        data = get_data(symbol)
 
     if data is None:
-        st.error("❌ Erreur marché")
+        st.error("❌ Données indisponibles")
     else:
-        close = data["Close"]
-        open_price = data["Open"]
+        try:
+            close = data["Close"]
+            open_price = data["Open"]
+            high = data["High"]
+            low = data["Low"]
 
-        if isinstance(close, pd.DataFrame):
-            close = close.iloc[:, 0]
-        if isinstance(open_price, pd.DataFrame):
-            open_price = open_price.iloc[:, 0]
+            # 🔥 FIX FORMAT
+            if isinstance(close, pd.DataFrame):
+                close = close.iloc[:, 0]
+            if isinstance(open_price, pd.DataFrame):
+                open_price = open_price.iloc[:, 0]
 
-        close = close.astype(float)
-        open_price = open_price.astype(float)
+            close = close.astype(float)
+            open_price = open_price.astype(float)
+            high = high.astype(float)
+            low = low.astype(float)
 
-        # 📊 indicateurs rapides
-        ema3 = close.ewm(span=3).mean()
-        ema7 = close.ewm(span=7).mean()
-        rsi = compute_rsi(close)
+            # 📊 INDICATEURS
+            ema5 = close.ewm(span=5).mean()
+            ema10 = close.ewm(span=10).mean()
+            ema20 = close.ewm(span=20).mean()
+            rsi = compute_rsi(close)
 
-        last_close = float(close.iloc[-1])
-        last_open = float(open_price.iloc[-1])
-        last_ema3 = float(ema3.iloc[-1])
-        last_ema7 = float(ema7.iloc[-1])
-        last_rsi = float(rsi.iloc[-1])
+            # 🔥 dernières valeurs
+            last_close = float(close.iloc[-1])
+            last_open = float(open_price.iloc[-1])
+            last_high = float(high.iloc[-1])
+            last_low = float(low.iloc[-1])
 
-        st.subheader("📡 SIGNAL")
+            last_ema5 = float(ema5.iloc[-1])
+            last_ema10 = float(ema10.iloc[-1])
+            last_ema20 = float(ema20.iloc[-1])
+            last_rsi = float(rsi.iloc[-1])
 
-        # 🔥 LOGIQUE ULTRA AGRESSIVE (toujours signal)
-        score_buy = 0
-        score_sell = 0
+            # 🎯 CONDITIONS SNIPER
+            trend_up = last_ema5 > last_ema10 > last_ema20
+            trend_down = last_ema5 < last_ema10 < last_ema20
 
-        if last_ema3 > last_ema7:
-            score_buy += 1
-        else:
-            score_sell += 1
+            candle_size = abs(last_close - last_open)
+            full_range = abs(last_high - last_low)
 
-        if last_rsi > 50:
-            score_buy += 1
-        else:
-            score_sell += 1
+            strong_buy_candle = last_close > last_open and candle_size > full_range * 0.6
+            strong_sell_candle = last_close < last_open and candle_size > full_range * 0.6
 
-        if last_close > last_open:
-            score_buy += 1
-        else:
-            score_sell += 1
+            buy = trend_up and last_rsi > 60 and strong_buy_candle
+            sell = trend_down and last_rsi < 40 and strong_sell_candle
 
-        # 🎯 décision FORCÉE
-        if score_buy >= score_sell:
-            st.success(f"🟢 BUY ({duration}) ⚡")
-            st.info("👉 Clique UP")
-        else:
-            st.error(f"🔴 SELL ({duration}) ⚡")
-            st.info("👉 Clique DOWN")
+            st.subheader("🎯 SNIPER SIGNAL")
+
+            if buy:
+                st.success(f"🟢 BUY ({duration}) 💎 SIGNAL FORT")
+                st.info("👉 Clique UP maintenant")
+            elif sell:
+                st.error(f"🔴 SELL ({duration}) 💎 SIGNAL FORT")
+                st.info("👉 Clique DOWN maintenant")
+            else:
+                st.warning("⚪ PAS DE SIGNAL (marché pas propre)")
+
+        except:
+            st.error("❌ Réessaie (données)")
