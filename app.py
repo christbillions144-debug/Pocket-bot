@@ -1,152 +1,134 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import time
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
 
-st.set_page_config(page_title="Pocket Scanner Pro", layout="centered")
+st.set_page_config(page_title="ELITE AI BOT", layout="centered")
 
-st.title("⚡ POCKET SCANNER BOT PRO")
+st.title("💎 ELITE AI TRADING BOT")
 
-symbols = ["EURUSD=X", "GBPUSD=X", "BTC-USD"]
-duration = st.selectbox("⏱ Durée", ["1 min", "5 min"])
+pairs = ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "BTC-USD"]
+duration = st.selectbox("⏱️ Durée", ["1m", "5m"])
 
-# 🔁 DATA SAFE
+# ======================
+# DATA
+# ======================
 def get_data(symbol):
-    for _ in range(5):
-        try:
-            data = yf.download(symbol, period="1d", interval="1m", progress=False)
-            if data is not None and not data.empty:
-                data = data.dropna()
-                if len(data) > 20:
-                    return data
-        except:
-            pass
-        time.sleep(1)
-    return None
-
-# 🔥 RSI SAFE
-def compute_rsi(close, period=6):
-    delta = close.diff()
-    gain = delta.clip(lower=0).rolling(period).mean()
-    loss = (-delta.clip(upper=0)).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
-# 🔍 ANALYSE SAFE
-def analyze(symbol):
-    data = get_data(symbol)
-
-    if data is None or len(data) < 20:
-        return None
-
     try:
-        close = data["Close"]
-        open_price = data["Open"]
-        high = data["High"]
-        low = data["Low"]
-
-        # 🔧 FIX FORMAT
-        if isinstance(close, pd.DataFrame):
-            close = close.iloc[:, 0]
-        if isinstance(open_price, pd.DataFrame):
-            open_price = open_price.iloc[:, 0]
-        if isinstance(high, pd.DataFrame):
-            high = high.iloc[:, 0]
-        if isinstance(low, pd.DataFrame):
-            low = low.iloc[:, 0]
-
-        close = close.astype(float)
-        open_price = open_price.astype(float)
-        high = high.astype(float)
-        low = low.astype(float)
-
-        # 📊 INDICATEURS
-        ema5 = close.ewm(span=5).mean()
-        ema10 = close.ewm(span=10).mean()
-        rsi = compute_rsi(close)
-
-        # 📌 DERNIÈRES VALEURS
-        last_close = float(close.iloc[-1])
-        last_open = float(open_price.iloc[-1])
-        last_high = float(high.iloc[-1])
-        last_low = float(low.iloc[-1])
-        last_ema5 = float(ema5.iloc[-1])
-        last_ema10 = float(ema10.iloc[-1])
-        last_rsi = float(rsi.iloc[-1])
-
-        # 🎯 LOGIQUE MIX
-        trend_up = last_ema5 > last_ema10
-        trend_down = last_ema5 < last_ema10
-
-        candle_size = abs(last_close - last_open)
-        range_size = abs(last_high - last_low)
-
-        candle_ok = candle_size > range_size * 0.3
-
-        score = 0
-
-        if trend_up:
-            score += 2
-        if trend_down:
-            score += 2
-        if last_rsi > 55:
-            score += 2
-        if last_rsi < 45:
-            score += 2
-        if candle_ok:
-            score += 1
-
-        if trend_up and last_rsi > 50:
-            signal = "BUY"
-        elif trend_down and last_rsi < 50:
-            signal = "SELL"
-        else:
-            signal = "WAIT"
-
-        return {
-            "symbol": symbol,
-            "signal": signal,
-            "score": score
-        }
-
+        data = yf.download(symbol, period="2d", interval="1m", progress=False)
+        if data is None or data.empty:
+            return None
+        return data.dropna()
     except:
         return None
 
-# 🚀 BOUTON
-if st.button("🚀 SCAN MARKET"):
+# ======================
+# FEATURES
+# ======================
+def create_features(df):
+    df["return"] = df["Close"].pct_change()
+    df["ma5"] = df["Close"].rolling(5).mean()
+    df["ma10"] = df["Close"].rolling(10).mean()
+    df["volatility"] = df["return"].rolling(10).std()
 
-    with st.spinner("Analyse du marché..."):
-        results = []
+    delta = df["Close"].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    rs = gain.rolling(7).mean() / loss.rolling(7).mean()
+    df["rsi"] = 100 - (100 / (1 + rs))
 
-        for s in symbols:
-            res = analyze(s)
+    df = df.dropna()
+    df["target"] = np.where(df["Close"].shift(-1) > df["Close"], 1, 0)
+
+    return df
+
+# ======================
+# MODEL
+# ======================
+def train_model(df):
+    features = ["return", "ma5", "ma10", "volatility", "rsi"]
+    X = df[features]
+    y = df["target"]
+
+    model = RandomForestClassifier(n_estimators=150)
+    model.fit(X, y)
+
+    return model
+
+# ======================
+# ANALYSE ELITE
+# ======================
+def analyze(symbol):
+    data = get_data(symbol)
+
+    if data is None or len(data) < 50:
+        return None
+
+    df = create_features(data)
+    model = train_model(df)
+
+    features = ["return", "ma5", "ma10", "volatility", "rsi"]
+
+    last = df[features].iloc[-1].values.reshape(1, -1)
+
+    prediction = model.predict(last)[0]
+    proba = model.predict_proba(last)[0]
+
+    confidence = max(proba)
+
+    # 🔥 FILTRE QUALITÉ
+    if confidence < 0.6:
+        return {"pair": symbol, "signal": "WAIT", "conf": confidence}
+
+    if prediction == 1:
+        signal = "CALL"
+    else:
+        signal = "PUT"
+
+    return {
+        "pair": symbol,
+        "signal": signal,
+        "conf": round(confidence, 2)
+    }
+
+# ======================
+# BUTTON
+# ======================
+if st.button("💎 SCAN ELITE AI"):
+
+    results = []
+
+    with st.spinner("Analyse IA en cours..."):
+        for p in pairs:
+            res = analyze(p)
             if res:
                 results.append(res)
 
     if len(results) == 0:
-        st.error("❌ Aucune donnée disponible")
+        st.error("❌ Aucune donnée")
     else:
-        # 🏆 MEILLEUR SIGNAL
-        best = max(results, key=lambda x: x["score"])
+        # 🏆 meilleur signal
+        best = max(results, key=lambda x: x["conf"])
 
-        st.subheader("🏆 MEILLEUR TRADE")
+        st.subheader("🏆 MEILLEUR SIGNAL")
 
-        if best["signal"] == "BUY":
-            st.success(f"🟢 BUY {best['symbol']} ({duration})")
-            st.info("👉 Clique UP sur Pocket Broker")
-        elif best["signal"] == "SELL":
-            st.error(f"🔴 SELL {best['symbol']} ({duration})")
-            st.info("👉 Clique DOWN sur Pocket Broker")
+        if best["signal"] == "CALL":
+            st.success(f"🟢 CALL {best['pair']} (confiance {best['conf']})")
+            st.info("👉 Clique UP")
+        elif best["signal"] == "PUT":
+            st.error(f"🔴 PUT {best['pair']} (confiance {best['conf']})")
+            st.info("👉 Clique DOWN")
         else:
-            st.warning("⚪ Marché pas clair")
+            st.warning("⚪ Aucun signal fiable")
 
-        # 📊 AUTRES RÉSULTATS
-        st.subheader("📊 ANALYSE COMPLÈTE")
+        # 📊 détails
+        st.subheader("📊 ANALYSE")
 
         for r in results:
-            if r["signal"] == "BUY":
-                st.write(f"🟢 {r['symbol']} → BUY (score {r['score']})")
-            elif r["signal"] == "SELL":
-                st.write(f"🔴 {r['symbol']} → SELL (score {r['score']})")
+            if r["signal"] == "WAIT":
+                st.write(f"⚪ {r['pair']} → WAIT ({r['conf']})")
+            elif r["signal"] == "CALL":
+                st.write(f"🟢 {r['pair']} → CALL ({r['conf']})")
             else:
-                st.write(f"⚪ {r['symbol']} → WAIT")
+                st.write(f"🔴 {r['pair']} → PUT ({r['conf']})")
